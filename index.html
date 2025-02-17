@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAML Test Service Provider</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      line-height: 1.6;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      box-sizing: border-box;
+    }
+    .section {
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin-top: 20px;
+      border-radius: 5px;
+      background: #f9f9f9;
+    }
+    pre {
+      background: #f0f0f0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      overflow: auto;
+    }
+    button {
+      margin-top: 10px;
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>SAML Test Service Provider</h1>
+  <p>
+    This is a test SAML Service Provider application. Configure your Identity
+    Provider (IdP) metadata below so that anyone can integrate with it as an IdP.
+    When a SAML response is received (via the <code>SAMLResponse</code> query parameter),
+    it will be decoded and displayed below as pretty‑printed XML.
+  </p>
+
+  <div class="section" id="configSection">
+    <h2>IdP Configuration</h2>
+    <label for="idpEntityId">IdP Entity ID:</label>
+    <input type="text" id="idpEntityId" placeholder="e.g., https://idp.example.com/metadata" />
+
+    <label for="idpSSOUrl">IdP SSO URL (Entry Point):</label>
+    <input type="text" id="idpSSOUrl" placeholder="e.g., https://idp.example.com/sso" />
+
+    <label for="idpCert">IdP Signing Certificate (optional):</label>
+    <textarea id="idpCert" rows="4" placeholder="Paste certificate here"></textarea>
+
+    <button id="saveConfig">Save Configuration</button>
+    <button id="clearConfig">Clear Configuration</button>
+    <p id="configStatus"></p>
+  </div>
+
+  <div class="section" id="samlSection">
+    <h2>Received SAML Assertion</h2>
+    <p>
+      If a SAML response is received via the <code>SAMLResponse</code> query parameter,
+      it will be processed and displayed below.
+    </p>
+    <pre id="samlOutput">No SAML Response received.</pre>
+  </div>
+
+  <script>
+    // --- Utility to get a query parameter value by name ---
+    function getQueryParam(name) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(name);
+    }
+
+    // --- Simple XML pretty printer ---
+    function formatXml(xml) {
+      let formatted = '';
+      let reg = /(>)(<)(\/*)/g;
+      xml = xml.replace(reg, '$1\r\n$2$3');
+      let pad = 0;
+      xml.split('\r\n').forEach((node) => {
+        let indent = 0;
+        if (node.match(/.+<\/\w[^>]*>$/)) {
+          indent = 0;
+        } else if (node.match(/^<\/\w/)) {
+          if (pad !== 0) {
+            pad -= 1;
+          }
+        } else if (node.match(/^<\w[^>]*[^\/]>.*$/)) {
+          indent = 1;
+        } else {
+          indent = 0;
+        }
+        let padding = new Array(pad + 1).join('  ');
+        formatted += padding + node + '\r\n';
+        pad += indent;
+      });
+      return formatted;
+    }
+
+    // --- Process SAMLResponse from query parameter ---
+    const samlResponseParam = getQueryParam('SAMLResponse');
+    if (samlResponseParam) {
+      try {
+        // SAMLResponse is typically base64 encoded.
+        const decoded = atob(samlResponseParam);
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(decoded, 'application/xml');
+        // Check if there was a parsing error.
+        if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+          document.getElementById('samlOutput').textContent = 'Error parsing XML.';
+        } else {
+          // Serialize XML back to string.
+          const serializer = new XMLSerializer();
+          const xmlStr = serializer.serializeToString(xmlDoc);
+          const prettyXml = formatXml(xmlStr);
+          document.getElementById('samlOutput').textContent = prettyXml;
+        }
+      } catch (e) {
+        document.getElementById('samlOutput').textContent =
+          'Error decoding or processing SAMLResponse: ' + e;
+      }
+    }
+
+    // --- Configuration persistence using localStorage ---
+    function loadConfig() {
+      const config = localStorage.getItem('idpConfig');
+      if (config) {
+        try {
+          const obj = JSON.parse(config);
+          document.getElementById('idpEntityId').value = obj.idpEntityId || '';
+          document.getElementById('idpSSOUrl').value = obj.idpSSOUrl || '';
+          document.getElementById('idpCert').value = obj.idpCert || '';
+          document.getElementById('configStatus').textContent =
+            'Configuration loaded from localStorage.';
+        } catch (e) {
+          console.error('Error loading configuration:', e);
+        }
+      }
+    }
+
+    // Save configuration to localStorage.
+    document.getElementById('saveConfig').addEventListener('click', function () {
+      const config = {
+        idpEntityId: document.getElementById('idpEntityId').value,
+        idpSSOUrl: document.getElementById('idpSSOUrl').value,
+        idpCert: document.getElementById('idpCert').value,
+      };
+      localStorage.setItem('idpConfig', JSON.stringify(config));
+      document.getElementById('configStatus').textContent = 'Configuration saved.';
+    });
+
+    // Clear configuration.
+    document.getElementById('clearConfig').addEventListener('click', function () {
+      localStorage.removeItem('idpConfig');
+      document.getElementById('idpEntityId').value = '';
+      document.getElementById('idpSSOUrl').value = '';
+      document.getElementById('idpCert').value = '';
+      document.getElementById('configStatus').textContent = 'Configuration cleared.';
+    });
+
+    // Load any saved configuration on startup.
+    loadConfig();
+  </script>
+</body>
+</html>
